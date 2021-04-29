@@ -1,0 +1,394 @@
+#!/usr/bin/python
+
+import sys
+import re
+import time
+import urllib3
+import datetime
+import math
+from bs4 import BeautifulSoup
+http = urllib3.PoolManager()
+
+def usage():
+    print("# This is a script which queries the PrimeNet server in order ")
+    print("# to get the status of exponents. Please don't run this with ")
+    print("# large ranges, it will do high load on the server.")
+    print("#")
+    print("# see https://mersenneforum.org/showthread.php?t=26750")
+    print("#")
+    print("# usage:")
+    print("#     python.exe get_work.py <from> <to>")
+    print("# example:")
+    print("#     python.exe get_work.py 123000 124000")
+    print("#         generates worktodos.txt for Mersenne numbers between 2^123000 and 2^124000")
+    print("#         if all Mersenne numbers in this range have appropriate P-1/P+1/ECM,")
+    print("#         then no output is generated")
+
+
+# Bounds taken by gut feeling.
+# See also https://mersenneforum.org/showthread.php?t=26750
+def PM1_B1_should(n, known_factors=False):
+    assert(n>50000)
+    if known_factors == False:
+        if n<  100000: return 250000000
+        if n<  250000: return 100000000
+        if n<  500000: return  30000000
+        if n< 1000000: return  15000000
+        if n< 4000000: return   5000000
+        if n<10000000: return   2500000
+        return                  1000000
+    else:
+        return PM1_B1_should(n, known_factors=False) // 5 
+        
+def PP1_B1_should(n, known_factors=False):
+    # half of P-1 bound
+    return PM1_B1_should(n, known_factors) // 2
+
+# actually, this should be called "is pseudoprime", but its safe enough
+def isprime(n):
+    sp = set([2,3,5,7,11,13,17,19])
+    if n < 20: return (n in sp)
+    for b in sp:
+        if pow(b,n-1,n) != 1:
+            return False
+    return True
+       
+def get_ecm_level(ecm):
+    level = 0 # number of digits
+    for minB1, desired, digits in [(11000,100,20), \
+                                   (50000,280,25), \
+                                   (250000,640,30), \
+                                   (1000000,1580,35), \
+                                   (3000000,4700,40), \
+                                   (11000000,9700,45), \
+                                   (44000000,17100,50), \
+                                   (110000000,46500,55), \
+                                   (260000000,112000,60), \
+                                   (800000000,360000,65)]:
+        count = 0
+        for (B1, B2) in ecm:
+            if B1 >= minB1:
+                count += ecm[(B1,B2)]
+        count /= desired
+        if count >= 2.:
+            level = max(level, digits+1)
+        elif count >= 1.:
+            level = max(level, digits)
+        elif count >= 0.5:
+            level = max(level, digits-1)
+    return level
+
+
+def worktodo_PM1(n,B1,B2=None, how_far_factored=67, factors=[]):
+    assert(B1 >= 11000)
+    if factors:
+        factors = ",\"" + ",".join([str(f) for f in factors]) + "\""
+    else:
+        factors = ""
+    if B2:
+        assert(B1 <= B2 and B2 <= 100000 * B1)
+    else:
+        B2 = 0
+    return f"Pminus1=N/A,1,2,{n},-1,{B1},{B2},{how_far_factored}" + factors
+
+def worktodo_PP1(n,B1,B2=None,nth_run=1, how_far_factored=67, factors=[]):
+    assert(B1 >= 11000)
+    if factors:
+        factors = ",\"" + ",".join([str(f) for f in factors]) + "\""
+    else:
+        factors = ""
+    if B2:
+        assert(B1 <= B2 and B2 <= 100000 * B1)
+    else:
+        B2 = 0
+    return f"Pplus1=N/A,1,2,{n},-1,{B1},{B2},{nth_run},{how_far_factored}" + factors
+
+#############################################################################################3
+
+if len(sys.argv) != 3:
+    usage()
+    sys.exit(1)
+
+start = int(sys.argv[1])
+stop  = int(sys.argv[2])
+sleep_time = 1.
+sleep_increase = 0.2
+
+for n in range(start,stop):
+    if isprime(n):
+        if n < 50000:
+            print(f"You should use GMP-ECM for this. Ignoring M{n}.")
+            continue
+
+        response = http.request('GET', f"https://www.mersenne.org/report_exponent/?exp_lo={n}&exp_hi=&text=1&full=1&ecmhist=1")   
+        html = response.data.decode('utf-8')
+        lines = [l.strip() for l in html.split("\n") if l.strip().startswith(f"{n}\t")]
+        factors = set()
+        ecm = {}    # (B1, B2) : count
+        pm1 = set() # (B1, B2, E)
+        pp1 = set() # (B1, B2, start1, start2)
+        is_recently_assigned = False
+        is_fully_factored = False
+        how_far_factored = [True] * 64 + [False] * (100-64) # how_far_factored[i] indicates if [2^(i-1); 2^(i)] was done
+        for l in lines:
+            if l.startswith(f"{n}\tFactored\t"):
+                #41681   Factored        1052945423;16647332713153;2853686272534246492102086015457
+                factors |= set([int(f) for f in l.split("\t")[2].split(";")])
+            elif l.startswith(f"{n}\tPRPCofactor\t"):
+                #41681   PRPCofactor     Verified (Factored);2017-11-09;kkmrkkblmbrbk;PRP_PRP_PRP_PRP_;3;37261;1;3
+                pass
+            elif l.startswith(f"{n}\tUnfactored\t"):
+                #100000007	Unfactored	2^79
+                result = l.split("\t")[2]
+                assert(result.startswith("2^"))
+                high = int(result[2:])
+                for i in range(high):
+                    how_far_factored[i] = True
+            elif l.startswith(f"{n}\tLL\t"):
+                # 100000007	LL	Verified;2018-02-26;G0rfi3ld;F9042256B193FAA0;3178317
+                pass 
+            elif l.startswith(f"{n}\tPM1\t"):
+                #100000007	PM1	B1=5000000,B2=150000000
+                result = l.split("\t")[2]
+                if   m:= re.match("^B1=([0-9]*),B2=([0-9]*),E=([0-9]*)$", result):
+                    B1, B2, E = int(m.group(1)), int(m.group(2)), int(m.group(3))
+                elif m:= re.match("^B1=([0-9]*),B2=([0-9]*)$", result):
+                    B1, B2 = int(m.group(1)), int(m.group(2))
+                    E = 0
+                elif m:= re.match("^B1=([0-9]*)$", result):
+                    B1 = int(m.group(1))
+                    B2, E = B1, 0
+                else:
+                    print(f"could not parse PM1 result \"{result}\" in line \"{l}\"")
+                    assert(False)
+                assert(B1 <= B2)
+                assert(E in [0,6,12,30])
+                pm1.add( (B1,B2,E))
+            elif l.startswith(f"{n}\tAssigned\t"):
+                h = l.split("\t")[2].split(";")
+                # 41081	Assigned	2017-10-09;Chang Chia-Tche;PRP test;;0.0;updated on 2017-10-09;expired on 2017-10-13
+                age_days = (datetime.datetime.now() - datetime.datetime.strptime(h[0], "%Y-%m-%d")).days
+                if age_days <= 2*365:
+                    is_recently_assigned = True
+            elif l.startswith(f"{n}\tHistory\t"):
+                h = l.split("\t")[2].split(";")
+                worktype, result = h[2], h[3]
+                if worktype == "F-ECM" or worktype == "F":
+                    # 41681   History 2015-04-26;Serge Batalov;F-ECM;Factor: 2853686272534246492102086015457
+                    # 41681   History 2008-08-26;-Anonymous-;F;Factor: 16647332713153
+                    factors.add(int(result.split(" ")[1]))
+                elif worktype == "CERT" or worktype == "C-PRP" or worktype == "C-LL":
+                    # we don't care for factorization purposes
+                    pass
+                elif worktype == "NF":
+                    # 100000007	History	2007-07-04;ComputerraRU;NF;no factor to 2^50
+                    if   m:= re.match("^no factor from 2\^([0-9]*)[ ]*to 2\^([0-9]*)[ ]*$", result):
+                        low, high = int(m.group(1)), int(m.group(2))
+                        for i in range(low, high):
+                            how_far_factored[i] = True
+                    elif m:= re.match("^no factor to 2\^([0-9]*)$", result):
+                        high = int(m.group(1))
+                        for i in range(high):
+                            how_far_factored[i] = True
+                    else:
+                        print(f"could not parse NF result \"{result}\" in line \"{l}\"")
+                        assert(False)
+                elif worktype == "NF-ECM":
+                    # 41681   History 2011-01-23;James Hintz;NF-ECM;3 curves, B1=250000, B2=25000000
+                    if   m:=re.match("^([0-9]*) curve[s]?, B1=([0-9]*), B2=([0-9]*)$", result):
+                        c  = int(m.group(1))
+                        B1 = int(m.group(2))
+                        B2 = int(m.group(3))
+                    elif m:=re.match("^([0-9]*) curve[s]?, B1=([0-9]*)", result):
+                        c  = int(m.group(1))
+                        B1 = int(m.group(2))
+                        B2 = B1
+                    else:
+                        print(f"could not parse NF-ECM result \"{result}\" in line \"{l}\"")
+                        assert(False)
+                    assert(B1 <= B2)
+                    assert(c >= 0) # actually, there are entries where count == 0
+                    if (B1,B2) not in ecm: ecm[(B1,B2)] = 0
+                    ecm[(B1,B2)] += c
+                elif worktype == "NF-PM1":
+                    # 3999971	History	2018-12-21;Jocelyn Larouche;NF-PM1;B1=3999971, B2=399997100, E=12
+                    if   m:= re.match("^B1=([0-9]*), B2=([0-9]*), E=([0-9]*)$", result):
+                        B1, B2, E = int(m.group(1)), int(m.group(2)), int(m.group(3))
+                    elif m:= re.match("^B1=([0-9]*), B2=([0-9]*)$", result):
+                        B1, B2 = int(m.group(1)), int(m.group(2))
+                        E = 0
+                    elif m:= re.match("^B1=([0-9]*)$", result):
+                        B1 = int(m.group(1))
+                        B2, E = B1, 0
+                    else:
+                        print(f"could not parse NF-PM1 result \"{result}\" in line \"{l}\"")
+                        assert(False)
+                    assert(B1 <= B2)
+                    assert(E in [0,6,12,30])
+                    pm1.add( (B1,B2,E))
+                elif worktype == "F-PM1":
+                    # 123031	History	2013-08-29;BloodIce;F-PM1;Factor: 3158950722867400921
+                    # 2000177	History	2019-01-15;Jocelyn Larouche;F-PM1;Factor: 131059942116526306804441369 / (P-1, B1=1000000) 
+                    if   m:= re.match("^Factor: ([0-9]*)$", result):
+                        f = int(m.group(1))
+                        factors.add(f)
+                    elif m:= re.match("^Factor: ([0-9]*) / \(P-1, B1=([0-9]*)\)$", result):
+                        f, B1 = int(m.group(1)), int(m.group(2))
+                        B2, E = B1, 0
+                        pm1.add( (B1,B2,E) )
+                        factors.add(f)
+                    elif m:= re.match("^Factor: ([0-9]*) / \(P-1, B1=([0-9]*), B2=([0-9]*)\)$", result):
+                        f, B1, B2 = int(m.group(1)), int(m.group(2)), int(m.group(3))
+                        E = 0
+                        pm1.add( (B1,B2,E) )
+                        factors.add(f)
+                    elif m:= re.match("^Factor: ([0-9]*) / \(P-1, B1=([0-9]*), B2=([0-9]*), E=([0-9]*)\)$", result):
+                        f, B1, B2, E = int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4))
+                        pm1.add( (B1,B2,E) )
+                        factors.add(f)
+                    else:
+                        print(f"Could not parse F-PM1 result \"{result}\" in line \"{l}\"")
+                        assert(False)
+                elif worktype == "F-PP1":
+                    if   m:= re.match("^Start=([0-9]*)/([0-9]*), B1=([0-9]*), B2=([0-9]*), Factor: ([0-9]*)$", result):
+                        start1, start2, B1, B2, f = int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4)), int(m.group(5))
+                        factors.add(f)
+                        assert(B1 <= B2)
+                        pp1.add( (B1, B2, start1, start2) )
+                    else:
+                        print(f"could not parse NF-PP1 result \"{result}\" in line \"{l}\"")
+                        assert(False)
+                elif worktype == "NF-PP1":
+                    # 41017	History	2021-04-27;gLauss;NF-PP1;Start=2/7, B1=10000000, B2=1000000000
+                    if   m:= re.match("^Start=([0-9]*)/([0-9]*), B1=([0-9]*), B2=([0-9]*)$", result):
+                        start1, start2, B1, B2 = int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4))
+                    elif m:= re.match("^Start=([0-9]*)/([0-9]*), B1=([0-9]*)$", result):
+                        start1, start2, B1 = int(m.group(1)), int(m.group(2)), int(m.group(3))
+                        B2 = B1
+                    else:
+                        print(f"could not parse NF-PP1 result \"{result}\" in line \"{l}\"")
+                        assert(False)
+                    assert(B1 <= B2)
+                    pp1.add( (B1, B2, start1, start2) )
+                else:
+                    print(f"unknown worktype {worktype}")
+                    assert(False)
+            else:
+                print(f"could not parse line \"{l}\"")
+                assert(False)
+        # check if factors are actually correct:
+        for f in factors:
+            assert(pow(2,n,f) == 1)
+        # for small numbers, we also check if fully factored
+        if n <= 100000:
+            remaining = 2**n-1
+            for f in factors:
+                remaining //= f
+            # check if fully factored
+            if remaining == 1:
+                is_fully_factored = True
+            elif isprime(remaining):
+                is_fully_factored = True
+                factors.add(remaining)
+        # convert how_far_factored to bit array:
+        # please note that TJAOI factored everything up to 66 bit
+        for i in range(66): how_far_factored[i] = True
+        hff = 64
+        while how_far_factored[hff]: hff += 1
+        how_far_factored = hff
+
+        # use ECM bounds to adapt how_far_factored
+        # as ECM is probabilistic, we want to be conservative and remove an extra 12 bits / 4 digits of factor size
+        how_far_factored = max(how_far_factored, int(get_ecm_level(ecm)*math.log2(10)) - 12)
+        how_far_factored = min(how_far_factored, 99)
+       
+        # boolean
+        if factors:
+            factors_known = True
+        else:
+            factors_known = False
+
+        # debug output
+        print(f"")
+        print(f"# n:                {n}")
+        print(f"# how_far_factored: {how_far_factored}")
+        print(f"# Factors:          {factors}")
+        print(f"# factors known:    {factors_known}")
+        print(f"# ECM Factoring:    {ecm}")
+        print(f"# P-1 Factoring:    {pm1}")
+        print(f"# P+1 Factoring:    {pp1}")
+        print(f"# assigned:         {is_recently_assigned}")
+        print(f"# fully factored:   {is_fully_factored}")
+        print(f"# ")
+
+
+        #####################################################################
+        # now the interesting part where the calculation what to do is done
+        #####################################################################
+
+        # only do P-1 / P+1 assigments, if B1 bound will increase by at least this factor
+        # If it is set to 2 and P-1 was done until 10M, then no new 15M assignment will be generated
+        DUPLICATE_WORK_FACTOR_PROPER_STAGE2 = 2.
+        DUPLICATE_WORK_FACTOR_NO_STAGE2     = 1.3
+
+        # recently assigned or fully factored exponents will be skipped
+        if is_recently_assigned or is_fully_factored:
+            continue
+
+        # calculate bounds
+        PM1_B1 = PM1_B1_should(n, factors_known)
+        PP1_B1 = PP1_B1_should(n, factors_known)
+
+        # check if it needs P-1 factoring
+        should_do_pm1 = True
+        B1_max_PM1 = 0 # will be required for calculating P+1 bounds
+        for (B1, B2, E) in pm1:
+            B1_max_PM1 = max(B1_max_PM1, B1) 
+            # don't do P-1 again if there was a proper run already
+            if B2 / B1 >= 10 and B1 > PM1_B1 / DUPLICATE_WORK_FACTOR_PROPER_STAGE2:
+                print(f"# should not do P-1: B1={PM1_B1} recommended but {B1} already done with B2={B2/B1:.1f}*B1")
+                should_do_pm1 = False 
+            elif B1 > PM1_B1 / DUPLICATE_WORK_FACTOR_NO_STAGE2:
+                print(f"# should not do P-1: B1={PM1_B1} recommended but {B1} already done (albeit without stage2)")
+                should_do_pm1 = False 
+        if should_do_pm1:
+            print(worktodo_PM1(n,PM1_B1,how_far_factored=how_far_factored,factors=factors))
+
+        # check if it needs P+1 factoring
+        should_do_pp1 = True
+        B1_max_start1_2 = 0
+        B1_max_start1_6 = 0
+        for (B1, B2, start1, start2) in pp1:
+            # update B1 bound for start values 2 and 6
+            if start1 == 2:
+                B1_max_start1_2 = max(B1_max_start1_2, B1)
+            elif start1 == 6:
+                B1_max_start1_6 = max(B1_max_start1_6, B1)
+            # ignore it, if there was a proper P+1 run with or without stage 2
+            if B2 / B1 > 10 and B1 > PP1_B1 / DUPLICATE_WORK_FACTOR_PROPER_STAGE2:
+                print(f"# should not do PP1: B1={PP1_B1} recommended but {B1} already done with B2={B2/B1:.1f}*B1")
+                should_do_pp1 = False 
+            elif B1 > PP1_B1 / DUPLICATE_WORK_FACTOR_NO_STAGE2:
+                print(f"# should not do PP1: B1={PP1_B1} recommended but {B1} already done (albeit without stage2)")
+                should_do_pp1 = False 
+        if should_do_pp1:
+            # determine if we should use 2, 6 or a random value as start values
+            # we want to use random only if there has been no 2 or 6 run before because they have higher likelyhood
+            nth_run = 3 # random
+            if B1_max_start1_2 == 0:
+                nth_run = 1
+            elif B1_max_start1_6 == 0:
+                nth_run = 2
+            else:
+                # in degenerate cases where there was a run with the optimal values 2 or 6 run,
+                # but only to very low bounds, we still want to use it.
+                if B1_max_start1_2 < PP1_B1 * 0.01:
+                    nth_run = 1
+                elif B1_max_start1_6 < PP1_B1 * 0.01:
+                    nth_run = 2
+            print(worktodo_PP1(n,PP1_B1,B2=0,nth_run=nth_run,how_far_factored=how_far_factored,factors=factors))
+
+        # sleep in order to not stress the server
+        # please note that this is intentionally quadratic to discourage use with large ranges 
+        time.sleep(sleep_time)
+        sleep_time += sleep_increase
