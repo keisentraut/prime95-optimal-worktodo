@@ -35,7 +35,6 @@ def usage():
 #500K-1M		 15M	 8M		10M	 5M
 #
 def PM1_B1_should(n, known_factors=False):
-    assert(n>50000)
     if known_factors == False:
         if n<  100000: return 250000000
         if n<  250000: return 100000000
@@ -65,32 +64,49 @@ def isprime(n):
         if pow(b,n-1,n) != 1:
             return False
     return True
-       
+
+ECMBOUNDS = [  (11000,100,20), \
+                (50000,280,25), \
+                (250000,640,30), \
+                (1000000,1580,35), \
+                (3000000,4700,40), \
+                (11000000,9700,45), \
+                (44000000,17100,50), \
+                (110000000,46500,55), \
+                (260000000,112000,60), \
+                (800000000,360000,65)]
 def get_ecm_level(ecm):
     level = 0 # number of digits
-    for minB1, desired, digits in [(11000,100,20), \
-                                   (50000,280,25), \
-                                   (250000,640,30), \
-                                   (1000000,1580,35), \
-                                   (3000000,4700,40), \
-                                   (11000000,9700,45), \
-                                   (44000000,17100,50), \
-                                   (110000000,46500,55), \
-                                   (260000000,112000,60), \
-                                   (800000000,360000,65)]:
+    for minB1, desired, digits in ECMBOUNDS:
         count = 0
         for (B1, B2) in ecm:
             if B1 >= minB1:
                 count += ecm[(B1,B2)]
-        count /= desired
+        count = count / desired
         if count >= 2.:
+            # twice as many curves as required
+            # chance to miss factor is exp(-2) = 0.1353352832366127
+            # therefore, increase digits by 1
             level = max(level, digits+1)
         elif count >= 1.:
+            # exactly as many curves as required
+            # chance to miss factor is exp(-1) = 0.36787944117144233 
             level = max(level, digits)
         elif count >= 0.5:
-            level = max(level, digits-1)
+            # half of curves required
+            # chance to miss factor is exp(-0.5) = 0.6065306597126334 
+            # therefore, reduce digits by 3 
+            level = max(level, digits-3)
     return level
 
+# returns t30 B1 bound where you should continue when having t25 completed
+def ecm_level_to_B1(level):
+    B1 = 1000000000000 # larger than any reasonable B1 bound
+    for minB1, desired, digits in ECMBOUNDS:
+        if level < digits:
+            B1 = min(B1, minB1)
+    return B1
+            
 
 def worktodo_PM1(n,B1,B2=None, how_far_factored=67, factors=[]):
     assert(B1 >= 11000)
@@ -178,7 +194,7 @@ for n in range(start,stop):
                     print(f"could not parse PM1 result \"{result}\" in line \"{l}\"")
                     assert(False)
                 assert(B1 <= B2)
-                assert(E in [0,6,12,30])
+                assert(E in [0,6,12,30,48])
                 pm1.add( (B1,B2,E))
             elif l.startswith(f"{n}\tAssigned\t"):
                 h = l.split("\t")[2].split(";")
@@ -240,7 +256,7 @@ for n in range(start,stop):
                         print(f"could not parse NF-PM1 result \"{result}\" in line \"{l}\"")
                         assert(False)
                     assert(B1 <= B2)
-                    assert(E in [0,6,12,30])
+                    assert(E in [0,6,12,30,48])
                     pm1.add( (B1,B2,E))
                 elif worktype == "F-PM1":
                     # 123031	History	2013-08-29;BloodIce;F-PM1;Factor: 3158950722867400921
@@ -296,7 +312,7 @@ for n in range(start,stop):
         for f in factors:
             assert(pow(2,n,f) == 1)
         # for small numbers, we also check if fully factored
-        if n <= 100000:
+        if n <= 50000:
             remaining = 2**n-1
             for f in factors:
                 remaining //= f
@@ -315,7 +331,15 @@ for n in range(start,stop):
 
         # use ECM bounds to adapt how_far_factored
         # as ECM is probabilistic, we want to be conservative and remove an extra 12 bits / 4 digits of factor size
-        how_far_factored = max(how_far_factored, int(get_ecm_level(ecm)*math.log2(10)) - 12)
+        ecm_level = get_ecm_level(ecm)
+        how_far_factored = max(how_far_factored, int(ecm_level*math.log2(10)) - 12)
+        
+        # B1 should be chosen accordingly, if you have done TF very high, you should start with larger bound 
+        # e.g. TF = 80 makes ECM t20 useless
+        ECM_B1 = ecm_level_to_B1(ecm_level)
+        ECM_B1 = max(ECM_B1, ecm_level_to_B1(int(how_far_factored / math.log2(10))))
+
+        # hard cut off at 99, because prime95 cannot do larger
         how_far_factored = min(how_far_factored, 99)
        
         # boolean
@@ -331,6 +355,8 @@ for n in range(start,stop):
         print(f"# Factors:          {factors}")
         print(f"# factors known:    {factors_known}")
         print(f"# ECM Factoring:    {ecm}")
+        print(f"# ECM level:        t{ecm_level}")
+        print(f"# ECM current B1:   {ECM_B1}")
         print(f"# P-1 Factoring:    {pm1}")
         print(f"# P+1 Factoring:    {pp1}")
         print(f"# assigned:         {is_recently_assigned}")
@@ -354,6 +380,14 @@ for n in range(start,stop):
         # calculate bounds
         PM1_B1 = PM1_B1_should(n, factors_known)
         PP1_B1 = PP1_B1_should(n, factors_known)
+        # if substantial ECM is already done, we might want to increase those bounds!
+        if ecm:
+            if 20*ECM_B1 > PM1_B1:
+                print(f"# increased desired P+1 B1 to 20*ECM_B1 because current ECM bound is already at B1={ECM_B1}") 
+                PM1_B1 = 20*ECM_B1
+            if 10*ECM_B1 > PP1_B1:
+                print(f"# increased desired P+1 B1 to 10*ECM_B1 because current ECM bound is already at B1={ECM_B1}") 
+                PP1_B1 = 10*ECM_B1
 
         # check if it needs P-1 factoring
         should_do_pm1 = True
