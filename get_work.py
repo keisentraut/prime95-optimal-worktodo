@@ -147,6 +147,9 @@ for n in range(start,stop):
             elif l.startswith(f"{n}\tLL\t"):
                 # 100000007	LL	Verified;2018-02-26;G0rfi3ld;F9042256B193FAA0;3178317
                 pass 
+            elif l.startswith(f"{n}\tPRP\t"):
+                # 20825573	PRP	Verified;2020-10-12;gLauss;738AD2BB0D72E3AA;1276614;1;3
+                pass
             elif l.startswith(f"{n}\tPM1\t"):
                 #100000007	PM1	B1=5000000,B2=150000000
                 result = l.split("\t")[2]
