@@ -25,8 +25,15 @@ def usage():
     print("#         then no output is generated")
 
 
-# Bounds taken by gut feeling.
-# See also https://mersenneforum.org/showthread.php?t=26750
+# Bounds defined by gut feeling.
+# see also posting by ATH at https://mersenneforum.org/showthread.php?t=26750 where he suggests:
+#
+#	      No known factors	     With known factors
+#Exponent       P-1 B1  P+1 B1          P-1 B1  P+1 B1
+#50K-250K 	100M	50M		30M 	15M
+#250K-500K	 30M	15M		15M	 8M
+#500K-1M		 15M	 8M		10M	 5M
+#
 def PM1_B1_should(n, known_factors=False):
     assert(n>50000)
     if known_factors == False:
@@ -36,9 +43,15 @@ def PM1_B1_should(n, known_factors=False):
         if n< 1000000: return  15000000
         if n< 4000000: return   5000000
         if n<10000000: return   2500000
-        return                  1000000
+        return                  2000000
     else:
-        return PM1_B1_should(n, known_factors=False) // 5 
+        if n<  100000: return 100000000
+        if n<  250000: return  30000000
+        if n<  500000: return  15000000
+        if n< 1000000: return  10000000
+        if n< 4000000: return   5000000
+        if n<10000000: return   2500000
+        return                  2000000
         
 def PP1_B1_should(n, known_factors=False):
     # half of P-1 bound
