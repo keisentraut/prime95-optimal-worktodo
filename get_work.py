@@ -408,6 +408,9 @@ for n in range(start,stop):
         should_do_pp1 = True
         B1_max_start1_2 = 0
         B1_max_start1_6 = 0
+        if B1_max_PM1//2 > PP1_B1:
+            PP1_B1 = B1_max_PM1 // 2
+            print(f"# increased desired P+1 B1 to {PP1_B1} because there was a P-1 with twice of this bound")
         for (B1, B2, start1, start2) in pp1:
             # update B1 bound for start values 2 and 6
             if start1 == 2:
