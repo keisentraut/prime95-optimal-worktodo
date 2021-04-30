@@ -312,6 +312,7 @@ for n in range(start,stop):
         for f in factors:
             assert(pow(2,n,f) == 1)
         # for small numbers, we also check if fully factored
+        # TODO: improve this, it is not considering probable prime factors (PRP-CF)
         if n <= 50000:
             remaining = 2**n-1
             for f in factors:
@@ -374,7 +375,11 @@ for n in range(start,stop):
         DUPLICATE_WORK_FACTOR_NO_STAGE2     = 1.3
 
         # recently assigned or fully factored exponents will be skipped
-        if is_recently_assigned or is_fully_factored:
+        if is_recently_assigned:
+            print("# skipping this exponent, because there is a recent assignment")
+            continue
+        if is_fully_factored:
+            print("# skipping this exponent, because it is fully factored")
             continue
 
         # calculate bounds
