@@ -6,23 +6,34 @@ import time
 import urllib3
 import datetime
 import math
-from bs4 import BeautifulSoup
 http = urllib3.PoolManager(headers={"User-Agent":"keisentraut/prime95-optimal-worktodo"})
 
+# print error message and exit hard
+def FATAL(msg):
+    print(f"FATAL: {msg}")
+    sys.exit(1)
+
+PRINT_DEBUG=1
+def DEBUG(msg):
+    if PRINT_DEBUG:
+        print(f"# {msg}")
+
+# prints usage
 def usage():
-    print("# This is a script which queries the PrimeNet server in order ")
-    print("# to get the status of exponents. Please don't run this with ")
-    print("# large ranges, it will do high load on the server.")
-    print("#")
-    print("# see https://mersenneforum.org/showthread.php?t=26750")
-    print("#")
-    print("# usage:")
-    print("#     python.exe get_work.py <from> <to>")
-    print("# example:")
-    print("#     python.exe get_work.py 123000 124000")
-    print("#         generates worktodos.txt for Mersenne numbers between 2^123000 and 2^124000")
-    print("#         if all Mersenne numbers in this range have appropriate P-1/P+1/ECM,")
-    print("#         then no output is generated")
+    DEBUG("This is a script which queries the PrimeNet server in order ")
+    DEBUG("to get the status of exponents. Please don't run this with ")
+    DEBUG("large ranges, it might create high load on the server.")
+    DEBUG("")
+    DEBUG("see https://mersenneforum.org/showthread.php?t=26750")
+    DEBUG("")
+    DEBUG("usage:")
+    DEBUG("    python.exe get_work.py <from> <to> <print_debug>")
+    DEBUG("example:")
+    DEBUG("    python.exe get_work.py 123000 124000 True")
+    DEBUG("        generates P-1/P+1 worktodo.txt file for Mersenne numbers with exponents between")
+    DEBUG("        123000 and 124000.If all Mersenne numbers in this range have appropriate P-1/P+1,")
+    DEBUG("        then no output is generated. The last argument \"True\" enables debug output.")
+    DEBUG("        Set the debug output to False, if you want to pass the output directly to Prime95.")
 
 
 # Bounds defined by gut feeling.
@@ -134,18 +145,21 @@ def worktodo_PP1(n,B1,B2=None,nth_run=1, how_far_factored=67, factors=[]):
 
 #############################################################################################3
 
-if len(sys.argv) != 3:
+if len(sys.argv) < 3 or len(sys.argv) > 4:
     usage()
     sys.exit(1)
+else:
+    start = int(sys.argv[1])
+    stop  = int(sys.argv[2])
+    if len(sys.argv) == 4:
+        PRINT_DEBUG = int(sys.argv[3])
 
-start = int(sys.argv[1])
-stop  = int(sys.argv[2])
 sleep_time = 1.
 
 for n in range(start,stop):
     if isprime(n):
         if n < 50000:
-            print(f"You should use GMP-ECM for this. Ignoring M{n}.")
+            DEBUG(f"You should use GMP-ECM for this. Ignoring M{n}.")
             continue
 
         response = http.request('GET', f"https://www.mersenne.org/report_exponent/?exp_lo={n}&exp_hi=&text=1&full=1&ecmhist=1")   
@@ -190,8 +204,7 @@ for n in range(start,stop):
                     B1 = int(m.group(1))
                     B2, E = B1, 0
                 else:
-                    print(f"could not parse PM1 result \"{result}\" in line \"{l}\"")
-                    assert(False)
+                    FATAL(f"could not parse PM1 result \"{result}\" in line \"{l}\"")
                 assert(B1 <= B2)
                 assert(E in [0,6,12,30,48])
                 pm1.add( (B1,B2,E))
@@ -222,7 +235,7 @@ for n in range(start,stop):
                         for i in range(high):
                             how_far_factored[i] = True
                     else:
-                        print(f"could not parse NF result \"{result}\" in line \"{l}\"")
+                        FATAL(f"could not parse NF result \"{result}\" in line \"{l}\"")
                         assert(False)
                 elif worktype == "NF-ECM":
                     # 41681   History 2011-01-23;James Hintz;NF-ECM;3 curves, B1=250000, B2=25000000
@@ -235,7 +248,7 @@ for n in range(start,stop):
                         B1 = int(m.group(2))
                         B2 = B1
                     else:
-                        print(f"could not parse NF-ECM result \"{result}\" in line \"{l}\"")
+                        FATAL(f"could not parse NF-ECM result \"{result}\" in line \"{l}\"")
                         assert(False)
                     assert(B1 <= B2)
                     assert(c >= 0) # actually, there are entries where count == 0
@@ -252,7 +265,7 @@ for n in range(start,stop):
                         B1 = int(m.group(1))
                         B2, E = B1, 0
                     else:
-                        print(f"could not parse NF-PM1 result \"{result}\" in line \"{l}\"")
+                        FATAL(f"could not parse NF-PM1 result \"{result}\" in line \"{l}\"")
                         assert(False)
                     assert(B1 <= B2)
                     assert(E in [0,6,12,30,48])
@@ -278,7 +291,7 @@ for n in range(start,stop):
                         pm1.add( (B1,B2,E) )
                         factors.add(f)
                     else:
-                        print(f"Could not parse F-PM1 result \"{result}\" in line \"{l}\"")
+                        FATAL(f"Could not parse F-PM1 result \"{result}\" in line \"{l}\"")
                         assert(False)
                 elif worktype == "F-PP1":
                     if   m:= re.match("^Start=([0-9]*)/([0-9]*), B1=([0-9]*), B2=([0-9]*), Factor: ([0-9]*)$", result):
@@ -287,7 +300,7 @@ for n in range(start,stop):
                         assert(B1 <= B2)
                         pp1.add( (B1, B2, start1, start2) )
                     else:
-                        print(f"could not parse NF-PP1 result \"{result}\" in line \"{l}\"")
+                        FATAL(f"could not parse NF-PP1 result \"{result}\" in line \"{l}\"")
                         assert(False)
                 elif worktype == "NF-PP1":
                     # 41017	History	2021-04-27;gLauss;NF-PP1;Start=2/7, B1=10000000, B2=1000000000
@@ -297,15 +310,15 @@ for n in range(start,stop):
                         start1, start2, B1 = int(m.group(1)), int(m.group(2)), int(m.group(3))
                         B2 = B1
                     else:
-                        print(f"could not parse NF-PP1 result \"{result}\" in line \"{l}\"")
+                        FATAL(f"could not parse NF-PP1 result \"{result}\" in line \"{l}\"")
                         assert(False)
                     assert(B1 <= B2)
                     pp1.add( (B1, B2, start1, start2) )
                 else:
-                    print(f"unknown worktype {worktype}")
+                    FATAL(f"unknown worktype {worktype}")
                     assert(False)
             else:
-                print(f"could not parse line \"{l}\"")
+                FATAL(f"could not parse line \"{l}\"")
                 assert(False)
         # check if factors are actually correct:
         for f in factors:
@@ -334,7 +347,7 @@ for n in range(start,stop):
         ecm_level = get_ecm_level(ecm)
         ecm_factored = int(ecm_level * math.log2(10)) - 12
         if how_far_factored < ecm_factored:
-            print(f"# increased how_far_factored from {how_far_factored} to {ecm_factored} because of substantial ECM")
+            DEBUG(f"increased how_far_factored from {how_far_factored} to {ecm_factored} because of substantial ECM")
             how_far_factored = ecm_factored
         
         # B1 should be chosen accordingly, if you have done TF very high, you should start with larger bound 
@@ -352,18 +365,18 @@ for n in range(start,stop):
             factors_known = False
 
         # debug output
-        print(f"# n:                {n}")
-        print(f"# how_far_factored: {how_far_factored}")
-        print(f"# Factors:          {factors}")
-        print(f"# factors known:    {factors_known}")
-        print(f"# ECM Factoring:    {ecm}")
-        print(f"# ECM level:        t{ecm_level}")
-        print(f"# ECM current B1:   {ECM_B1}")
-        print(f"# P-1 Factoring:    {pm1}")
-        print(f"# P+1 Factoring:    {pp1}")
-        print(f"# assigned:         {is_recently_assigned}")
-        print(f"# fully factored:   {is_fully_factored}")
-        print(f"# ")
+        DEBUG(f"n:                {n}")
+        DEBUG(f"how_far_factored: {how_far_factored}")
+        DEBUG(f"Factors:          {factors}")
+        DEBUG(f"factors known:    {factors_known}")
+        DEBUG(f"ECM Factoring:    {ecm}")
+        DEBUG(f"ECM level:        t{ecm_level}")
+        DEBUG(f"ECM current B1:   {ECM_B1}")
+        DEBUG(f"P-1 Factoring:    {pm1}")
+        DEBUG(f"P+1 Factoring:    {pp1}")
+        DEBUG(f"assigned:         {is_recently_assigned}")
+        DEBUG(f"fully factored:   {is_fully_factored}")
+        DEBUG(f"")
 
 
         #####################################################################
@@ -377,10 +390,10 @@ for n in range(start,stop):
 
         # recently assigned or fully factored exponents will be skipped
         if is_recently_assigned:
-            print("# skipping this exponent, because there is a recent assignment")
+            DEBUG("skipping this exponent, because there is a recent assignment")
             continue
         if is_fully_factored:
-            print("# skipping this exponent, because it is fully factored")
+            DEBUG("skipping this exponent, because it is fully factored")
             continue
 
         # calculate bounds
@@ -389,10 +402,10 @@ for n in range(start,stop):
         # if substantial ECM is already done, we might want to increase those bounds!
         if ecm:
             if 20*ECM_B1 > PM1_B1:
-                print(f"# increased desired P+1 B1 to 20*ECM_B1 because current ECM bound is already at B1={ECM_B1}") 
+                DEBUG(f"increased desired P+1 B1 to 20*ECM_B1 because current ECM bound is already at B1={ECM_B1}") 
                 PM1_B1 = 20*ECM_B1
             if 10*ECM_B1 > PP1_B1:
-                print(f"# increased desired P+1 B1 to 10*ECM_B1 because current ECM bound is already at B1={ECM_B1}") 
+                DEBUG(f"increased desired P+1 B1 to 10*ECM_B1 because current ECM bound is already at B1={ECM_B1}") 
                 PP1_B1 = 10*ECM_B1
 
         # check if it needs P-1 factoring
@@ -402,10 +415,10 @@ for n in range(start,stop):
             B1_max_PM1 = max(B1_max_PM1, B1) 
             # don't do P-1 again if there was a proper run already
             if B2 / B1 >= 10 and B1 > PM1_B1 / DUPLICATE_WORK_FACTOR_PROPER_STAGE2:
-                print(f"# should not do P-1: B1={PM1_B1} recommended but {B1} already done with B2={B2/B1:.1f}*B1")
+                DEBUG(f"should not do P-1: B1={PM1_B1} recommended but {B1} already done with B2={B2/B1:.1f}*B1")
                 should_do_pm1 = False 
             elif B1 > PM1_B1 / DUPLICATE_WORK_FACTOR_NO_STAGE2:
-                print(f"# should not do P-1: B1={PM1_B1} recommended but {B1} already done (albeit without stage2)")
+                DEBUG(f"should not do P-1: B1={PM1_B1} recommended but {B1} already done (albeit without stage2)")
                 should_do_pm1 = False 
         if should_do_pm1:
             print(worktodo_PM1(n,PM1_B1,how_far_factored=how_far_factored,factors=factors))
@@ -416,7 +429,7 @@ for n in range(start,stop):
         B1_max_start1_6 = 0
         if B1_max_PM1//2 > PP1_B1:
             PP1_B1 = B1_max_PM1 // 2
-            print(f"# increased desired P+1 B1 to {PP1_B1} because there was a P-1 with twice of this bound")
+            DEBUG(f"increased desired P+1 B1 to {PP1_B1} which is half of the already done P-1 bound")
         for (B1, B2, start1, start2) in pp1:
             # update B1 bound for start values 2 and 6
             if start1 == 2:
@@ -425,10 +438,10 @@ for n in range(start,stop):
                 B1_max_start1_6 = max(B1_max_start1_6, B1)
             # ignore it, if there was a proper P+1 run with or without stage 2
             if B2 / B1 > 10 and B1 > PP1_B1 / DUPLICATE_WORK_FACTOR_PROPER_STAGE2:
-                print(f"# should not do PP1: B1={PP1_B1} recommended but {B1} already done with B2={B2/B1:.1f}*B1")
+                DEBUG(f"should not do PP1: B1={PP1_B1} recommended but {B1} already done with B2={B2/B1:.1f}*B1")
                 should_do_pp1 = False 
             elif B1 > PP1_B1 / DUPLICATE_WORK_FACTOR_NO_STAGE2:
-                print(f"# should not do PP1: B1={PP1_B1} recommended but {B1} already done (albeit without stage2)")
+                DEBUG(f"should not do PP1: B1={PP1_B1} recommended but {B1} already done (albeit without stage2)")
                 should_do_pp1 = False 
         if should_do_pp1:
             # determine if we should use 2, 6 or a random value as start values
