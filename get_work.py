@@ -343,9 +343,10 @@ for n in range(start,stop):
         how_far_factored = hff
 
         # use ECM bounds to adapt how_far_factored
-        # as ECM is probabilistic, we want to be conservative and remove an extra 12 bits / 4 digits of factor size
+        # as ECM is probabilistic, we want to be conservative and remove an extra 8 bits / 3 digits of factor size
+        # see ATH's reply at https://mersenneforum.org/showpost.php?p=577509&postcount=51
         ecm_level = get_ecm_level(ecm)
-        ecm_factored = int(ecm_level * math.log2(10)) - 12
+        ecm_factored = int(ecm_level * math.log2(10)) - 8
         if how_far_factored < ecm_factored:
             DEBUG(f"increased how_far_factored from {how_far_factored} to {ecm_factored} because of substantial ECM")
             how_far_factored = ecm_factored
