@@ -7,7 +7,7 @@ import urllib3
 import datetime
 import math
 from bs4 import BeautifulSoup
-http = urllib3.PoolManager()
+http = urllib3.PoolManager(headers={"User-Agent":"keisentraut/prime95-optimal-worktodo"})
 
 def usage():
     print("# This is a script which queries the PrimeNet server in order ")
@@ -141,7 +141,6 @@ if len(sys.argv) != 3:
 start = int(sys.argv[1])
 stop  = int(sys.argv[2])
 sleep_time = 1.
-sleep_increase = 0.2
 
 for n in range(start,stop):
     if isprime(n):
@@ -323,17 +322,20 @@ for n in range(start,stop):
             elif isprime(remaining):
                 is_fully_factored = True
                 factors.add(remaining)
-        # convert how_far_factored to bit array:
+        # convert how_far_factored from a bit array to an integer
         # please note that TJAOI factored everything up to 66 bit
         for i in range(66): how_far_factored[i] = True
-        hff = 64
+        hff = 0
         while how_far_factored[hff]: hff += 1
         how_far_factored = hff
 
         # use ECM bounds to adapt how_far_factored
         # as ECM is probabilistic, we want to be conservative and remove an extra 12 bits / 4 digits of factor size
         ecm_level = get_ecm_level(ecm)
-        how_far_factored = max(how_far_factored, int(ecm_level*math.log2(10)) - 12)
+        ecm_factored = int(ecm_level * math.log2(10)) - 12
+        if how_far_factored < ecm_factored:
+            print("# increased how_far_factored from {how_far_factored} to {ecm_factored} because of substantial ECM")
+            how_far_factored = ecm_factored
         
         # B1 should be chosen accordingly, if you have done TF very high, you should start with larger bound 
         # e.g. TF = 80 makes ECM t20 useless
@@ -447,6 +449,4 @@ for n in range(start,stop):
             print(worktodo_PP1(n,PP1_B1,B2=0,nth_run=nth_run,how_far_factored=how_far_factored,factors=factors))
 
         # sleep in order to not stress the server
-        # please note that this is intentionally quadratic to discourage use with large ranges 
         time.sleep(sleep_time)
-        sleep_time += sleep_increase
