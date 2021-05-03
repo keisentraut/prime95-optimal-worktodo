@@ -158,10 +158,10 @@ sleep_time = 1.
 
 for n in range(start,stop):
     if isprime(n):
+        DEBUG("-"*80)
         if n < 50000:
             DEBUG(f"You should use GMP-ECM for this. Ignoring M{n}.")
             continue
-
         response = http.request('GET', f"https://www.mersenne.org/report_exponent/?exp_lo={n}&exp_hi=&text=1&full=1&ecmhist=1")   
         html = response.data.decode('utf-8')
         lines = [l.strip() for l in html.split("\n") if l.strip().startswith(f"{n}\t")]
@@ -376,7 +376,6 @@ for n in range(start,stop):
         DEBUG(f"P+1 Factoring:    {pp1}")
         DEBUG(f"assigned:         {is_recently_assigned}")
         DEBUG(f"fully factored:   {is_fully_factored}")
-        DEBUG(f"")
 
 
         #####################################################################
@@ -390,10 +389,10 @@ for n in range(start,stop):
 
         # recently assigned or fully factored exponents will be skipped
         if is_recently_assigned:
-            DEBUG("skipping this exponent, because there is a recent assignment")
+            DEBUG(f"skipping exponent {n}, because there is a recent assignment")
             continue
         if is_fully_factored:
-            DEBUG("skipping this exponent, because it is fully factored")
+            DEBUG(f"skipping exponent {n}, because it is fully factored")
             continue
 
         # calculate bounds
