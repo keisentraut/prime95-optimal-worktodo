@@ -334,7 +334,7 @@ for n in range(start,stop):
         ecm_level = get_ecm_level(ecm)
         ecm_factored = int(ecm_level * math.log2(10)) - 12
         if how_far_factored < ecm_factored:
-            print("# increased how_far_factored from {how_far_factored} to {ecm_factored} because of substantial ECM")
+            print(f"# increased how_far_factored from {how_far_factored} to {ecm_factored} because of substantial ECM")
             how_far_factored = ecm_factored
         
         # B1 should be chosen accordingly, if you have done TF very high, you should start with larger bound 
@@ -352,7 +352,6 @@ for n in range(start,stop):
             factors_known = False
 
         # debug output
-        print(f"")
         print(f"# n:                {n}")
         print(f"# how_far_factored: {how_far_factored}")
         print(f"# Factors:          {factors}")
