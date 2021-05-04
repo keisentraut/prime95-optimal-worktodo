@@ -76,6 +76,11 @@ def isprime(n):
             return False
     return True
 
+# takes a string like "2020-02-12" as input, returns True if it was less than 6 months ago.
+def is_recent(datestr):
+    age_days = (datetime.datetime.now() - datetime.datetime.strptime(datestr, "%Y-%m-%d")).days
+    return age_days >= 180
+
 ECMBOUNDS = [  (11000,100,20), \
                 (50000,280,25), \
                 (250000,640,30), \
@@ -211,10 +216,9 @@ for n in range(start,stop):
             elif l.startswith(f"{n}\tAssigned\t"):
                 h = l.split("\t")[2].split(";")
                 # 41081	Assigned	2017-10-09;Chang Chia-Tche;PRP test;;0.0;updated on 2017-10-09;expired on 2017-10-13
-                age_days = (datetime.datetime.now() - datetime.datetime.strptime(h[0], "%Y-%m-%d")).days
-                if age_days <= 2*365:
-                    is_recently_assigned = True
+                is_recently_assigned |= is_recent(h[0])
             elif l.startswith(f"{n}\tHistory\t"):
+                is_recently_assigned |= is_recent(h[0])
                 h = l.split("\t")[2].split(";")
                 worktype, result = h[2], h[3]
                 if worktype == "F-ECM" or worktype == "F":
@@ -375,7 +379,7 @@ for n in range(start,stop):
         DEBUG(f"ECM current B1:   {ECM_B1}")
         DEBUG(f"P-1 Factoring:    {pm1}")
         DEBUG(f"P+1 Factoring:    {pp1}")
-        DEBUG(f"assigned:         {is_recently_assigned}")
+        DEBUG(f"recent results:   {is_recently_assigned}")
         DEBUG(f"fully factored:   {is_fully_factored}")
 
 
@@ -390,7 +394,7 @@ for n in range(start,stop):
 
         # recently assigned or fully factored exponents will be skipped
         if is_recently_assigned:
-            DEBUG(f"skipping exponent {n}, because there is a recent assignment")
+            DEBUG(f"skipping exponent {n}, because it is assigned or there has been work done <180 days ago")
             continue
         if is_fully_factored:
             DEBUG(f"skipping exponent {n}, because it is fully factored")
