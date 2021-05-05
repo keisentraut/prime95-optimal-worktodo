@@ -218,8 +218,8 @@ for n in range(start,stop):
                 # 41081	Assigned	2017-10-09;Chang Chia-Tche;PRP test;;0.0;updated on 2017-10-09;expired on 2017-10-13
                 is_recently_assigned |= is_recent(h[0])
             elif l.startswith(f"{n}\tHistory\t"):
-                is_recently_assigned |= is_recent(h[0])
                 h = l.split("\t")[2].split(";")
+                is_recently_assigned |= is_recent(h[0])
                 worktype, result = h[2], h[3]
                 if worktype == "F-ECM" or worktype == "F":
                     # 41681   History 2015-04-26;Serge Batalov;F-ECM;Factor: 2853686272534246492102086015457
