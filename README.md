@@ -7,13 +7,20 @@ TODO: explain what is going on here, for now this link will have do it [https://
 # Usage
 
 ```
- usage:
-     python.exe get_work.py <from> <to>
- example:
-     python.exe get_work.py 123000 124000
-         generates worktodos.txt for Mersenne numbers between 2^123000 and 2^124000
-         if all Mersenne numbers in this range have appropriate P-1/P+1/ECM,
-         then no output is generated
+# This is a script which queries the PrimeNet server in order 
+# to get the status of exponents. Please don't run this with 
+# large ranges, it might create high load on the server.
+# 
+# see https://mersenneforum.org/showthread.php?t=26750
+# 
+# usage:
+#     python.exe get_work.py <from> <to> <print_debug>
+# example:
+#     python.exe get_work.py 123000 124000 True
+#         generates P-1/P+1 worktodo.txt file for Mersenne numbers with exponents between
+#         123000 and 124000.If all Mersenne numbers in this range have appropriate P-1/P+1,
+#         then no output is generated. The last argument "True" enables debug output.
+#         Set the debug output to False, if you want to pass the output directly to Prime95.
 ```
 
 # Installation
