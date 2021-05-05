@@ -76,10 +76,10 @@ def isprime(n):
             return False
     return True
 
-# takes a string like "2020-02-12" as input, returns True if it was less than 6 months ago.
+# takes a string like "2020-02-12" as input, returns True if it was less than 3 months ago.
 def is_recent(datestr):
     age_days = (datetime.datetime.now() - datetime.datetime.strptime(datestr, "%Y-%m-%d")).days
-    return age_days >= 180
+    return age_days <= 90 
 
 ECMBOUNDS = [  (11000,100,20), \
                 (50000,280,25), \
@@ -394,7 +394,7 @@ for n in range(start,stop):
 
         # recently assigned or fully factored exponents will be skipped
         if is_recently_assigned:
-            DEBUG(f"skipping exponent {n}, because it is assigned or there has been work done <180 days ago")
+            DEBUG(f"skipping exponent {n}, because it is assigned or there has been work done <90 days ago")
             continue
         if is_fully_factored:
             DEBUG(f"skipping exponent {n}, because it is fully factored")
