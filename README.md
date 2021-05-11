@@ -6,7 +6,7 @@ You should use this script if you want to contribute to the goal of doing proper
 I have defined the following bounds as "proper" bounds:
 
 | Exponent range | P-1 B1 (known factor) | P-1 B1 (unfactored) |
-| --- | --- |
+| ------ | ------ | ----- |
 | 50k < n < 100k  | 100.000.000 | 250.000.000 |
 | 100k < n < 250k |  30.000.000 | 100.000.000 |
 | 250k < n < 500k |  15.000.000 |  30.000.000 |
