@@ -62,7 +62,7 @@ def PM1_B1_should(n, known_factors=False):
         if n< 4000000: return   5000000
         if n<10000000: return   2500000
         return                  2000000
-        
+
 def PP1_B1_should(n, known_factors=False):
     # half of P-1 bound
     return PM1_B1_should(n, known_factors) // 2
@@ -79,7 +79,7 @@ def isprime(n):
 # takes a string like "2020-02-12" as input, returns True if it was less than 3 months ago.
 def is_recent(datestr):
     age_days = (datetime.datetime.now() - datetime.datetime.strptime(datestr, "%Y-%m-%d")).days
-    return age_days <= 90 
+    return age_days <= 90
 
 ECMBOUNDS = [  (11000,100,20), \
                 (50000,280,25), \
@@ -106,12 +106,12 @@ def get_ecm_level(ecm):
             level = max(level, digits+1)
         elif count >= 1.:
             # exactly as many curves as required
-            # chance to miss factor is exp(-1) = 0.36787944117144233 
+            # chance to miss factor is exp(-1) = 0.36787944117144233
             level = max(level, digits)
         elif count >= 0.5:
             # half of curves required
-            # chance to miss factor is exp(-0.5) = 0.6065306597126334 
-            # therefore, reduce digits by 3 
+            # chance to miss factor is exp(-0.5) = 0.6065306597126334
+            # therefore, reduce digits by 3
             level = max(level, digits-3)
     return level
 
@@ -136,11 +136,11 @@ def factorize(n):
     # I don't want to implement a fancy algorithm either.
     # So we just use some TF and then pollard rho...
     for i in [2,3,5,7,11,13,17,19,23,29,31,37,39]:
-        if n % i == 0: 
+        if n % i == 0:
             return [i] + factorize(n//i)
     # pollard rho
     x,y = 2,2
-    while True: 
+    while True:
         x = pow(x,2,n) + 1
         y = pow(y,2,n) + 1
         y = pow(y,2,n) + 1
@@ -191,7 +191,7 @@ for n in range(start,stop):
         if n < 50000:
             DEBUG(f"You should use GMP-ECM for this. Ignoring M{n}.")
             continue
-        response = http.request('GET', f"https://www.mersenne.org/report_exponent/?exp_lo={n}&exp_hi=&text=1&full=1&ecmhist=1")   
+        response = http.request('GET', f"https://www.mersenne.org/report_exponent/?exp_lo={n}&exp_hi=&text=1&full=1&ecmhist=1")
         html = response.data.decode('utf-8')
         lines = [l.strip() for l in html.split("\n") if l.strip().startswith(f"{n}\t")]
         factors = set()
@@ -217,7 +217,7 @@ for n in range(start,stop):
                     how_far_factored[i] = True
             elif l.startswith(f"{n}\tLL\t"):
                 # 100000007	LL	Verified;2018-02-26;G0rfi3ld;F9042256B193FAA0;3178317
-                pass 
+                pass
             elif l.startswith(f"{n}\tPRP\t"):
                 # 20825573	PRP	Verified;2020-10-12;gLauss;738AD2BB0D72E3AA;1276614;1;3
                 pass
@@ -300,7 +300,7 @@ for n in range(start,stop):
                     pm1.add( (B1,B2,E))
                 elif worktype == "F-PM1":
                     # 123031	History	2013-08-29;BloodIce;F-PM1;Factor: 3158950722867400921
-                    # 2000177	History	2019-01-15;Jocelyn Larouche;F-PM1;Factor: 131059942116526306804441369 / (P-1, B1=1000000) 
+                    # 2000177	History	2019-01-15;Jocelyn Larouche;F-PM1;Factor: 131059942116526306804441369 / (P-1, B1=1000000)
                     if   m:= re.match("^Factor: ([0-9]*)$", result):
                         f = int(m.group(1))
                         factors.add(f)
@@ -352,7 +352,7 @@ for n in range(start,stop):
         for f in factors:
             assert(pow(2,n,f) == 1)
 
-        # check if all reported factors are actually prime 
+        # check if all reported factors are actually prime
         # (sometimes, composite factors are reported by server)
         factors = sorted(list(factors))
         def split_composite_factors(l):
@@ -366,7 +366,7 @@ for n in range(start,stop):
                         return split_composite_factors(sorted(list(all_factors)))
             return l
         factors = set(split_composite_factors(sorted(list(set(factors)))))
-        
+
         # we can still have composite factors when the server reported only a*b but neither a nor b as factor
         # Then, we need to factorize ourselves.
         all_factors = set()
@@ -374,7 +374,7 @@ for n in range(start,stop):
             for i in factorize(f):
                 all_factors.add(i)
         factors = all_factors
-            
+
 
         # for small numbers, we also check if fully factored
         # TODO: improve this, it is not considering probable prime factors (PRP-CF)
@@ -403,15 +403,15 @@ for n in range(start,stop):
         if how_far_factored < ecm_factored:
             DEBUG(f"increased how_far_factored from {how_far_factored} to {ecm_factored} because of substantial ECM")
             how_far_factored = ecm_factored
-        
-        # B1 should be chosen accordingly, if you have done TF very high, you should start with larger bound 
+
+        # B1 should be chosen accordingly, if you have done TF very high, you should start with larger bound
         # e.g. TF = 80 makes ECM t20 useless
         ECM_B1 = ecm_level_to_B1(ecm_level)
         ECM_B1 = max(ECM_B1, ecm_level_to_B1(int(how_far_factored / math.log2(10))))
 
         # hard cut off at 99, because prime95 cannot do larger
         how_far_factored = min(how_far_factored, 99)
-       
+
         # boolean
         if factors:
             factors_known = True
@@ -455,24 +455,24 @@ for n in range(start,stop):
         # if substantial ECM is already done, we might want to increase those bounds!
         if ecm:
             if 20*ECM_B1 > PM1_B1:
-                DEBUG(f"increased desired P+1 B1 to 20*ECM_B1 because current ECM bound is already at B1={ECM_B1}") 
+                DEBUG(f"increased desired P+1 B1 to 20*ECM_B1 because current ECM bound is already at B1={ECM_B1}")
                 PM1_B1 = 20*ECM_B1
             if 10*ECM_B1 > PP1_B1:
-                DEBUG(f"increased desired P+1 B1 to 10*ECM_B1 because current ECM bound is already at B1={ECM_B1}") 
+                DEBUG(f"increased desired P+1 B1 to 10*ECM_B1 because current ECM bound is already at B1={ECM_B1}")
                 PP1_B1 = 10*ECM_B1
 
         # check if it needs P-1 factoring
         should_do_pm1 = True
         B1_max_PM1 = 0 # will be required for calculating P+1 bounds
         for (B1, B2, E) in pm1:
-            B1_max_PM1 = max(B1_max_PM1, B1) 
+            B1_max_PM1 = max(B1_max_PM1, B1)
             # don't do P-1 again if there was a proper run already
             if B2 / B1 >= 10 and B1 > PM1_B1 / DUPLICATE_WORK_FACTOR_PROPER_STAGE2:
                 DEBUG(f"should not do P-1: B1={PM1_B1} recommended but {B1} already done with B2={B2/B1:.1f}*B1")
-                should_do_pm1 = False 
+                should_do_pm1 = False
             elif B1 > PM1_B1 / DUPLICATE_WORK_FACTOR_NO_STAGE2:
                 DEBUG(f"should not do P-1: B1={PM1_B1} recommended but {B1} already done (albeit without stage2)")
-                should_do_pm1 = False 
+                should_do_pm1 = False
         if should_do_pm1:
             print(worktodo_PM1(n,PM1_B1,how_far_factored=how_far_factored,factors=factors))
 
@@ -492,10 +492,10 @@ for n in range(start,stop):
             # ignore it, if there was a proper P+1 run with or without stage 2
             if B2 / B1 > 10 and B1 > PP1_B1 / DUPLICATE_WORK_FACTOR_PROPER_STAGE2:
                 DEBUG(f"should not do PP1: B1={PP1_B1} recommended but {B1} already done with B2={B2/B1:.1f}*B1")
-                should_do_pp1 = False 
+                should_do_pp1 = False
             elif B1 > PP1_B1 / DUPLICATE_WORK_FACTOR_NO_STAGE2:
                 DEBUG(f"should not do PP1: B1={PP1_B1} recommended but {B1} already done (albeit without stage2)")
-                should_do_pp1 = False 
+                should_do_pp1 = False
         if should_do_pp1:
             # determine if we should use 2, 6 or a random value as start values
             # we want to use random only if there has been no 2 or 6 run before because they have higher likelyhood
