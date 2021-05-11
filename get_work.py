@@ -122,7 +122,31 @@ def ecm_level_to_B1(level):
         if level < digits:
             B1 = min(B1, minB1)
     return B1
-            
+
+# sometimes, composite factors are reported by the server
+# we need to factor them, but we obviously can only do this for "sane" sized numbers
+# TODO: implement something better than pollard rho
+def factorize(n):
+    if n >= 10**60:
+        FATAL(f"Cannot factor {n}, it is too large.")
+        assert(False)
+    # stop recursion if prime is found
+    if isprime(n):
+        return [n]
+    # I don't want to implement a fancy algorithm either.
+    # So we just use some TF and then pollard rho...
+    for i in [2,3,5,7,11,13,17,19,23,29,31,37,39]:
+        if n % i == 0: 
+            return [i] + factorize(n//i)
+    # pollard rho
+    x,y = 2,2
+    while True: 
+        x = pow(x,2,n) + 1
+        y = pow(y,2,n) + 1
+        y = pow(y,2,n) + 1
+        if math.gcd(x-y,n) != 1:
+            f = math.gcd(x-y,n)
+            return sorted(factorize(n//f) + factorize(f))
 
 def worktodo_PM1(n,B1,B2=None, how_far_factored=67, factors=[]):
     assert(B1 >= 11000)
@@ -327,6 +351,31 @@ for n in range(start,stop):
         # check if factors are actually correct:
         for f in factors:
             assert(pow(2,n,f) == 1)
+
+        # check if all reported factors are actually prime 
+        # (sometimes, composite factors are reported by server)
+        factors = sorted(list(factors))
+        def split_composite_factors(l):
+            # l is a ascending list of factors. check if l[i] is divisor of l[j] for i<j.
+            for j in range(len(l)):
+                for i in range(j):
+                    if l[j] % l[i] == 0:
+                        all_factors = set(l)
+                        all_factors.remove(l[j])
+                        all_factors.add(l[j] // l[i])
+                        return split_composite_factors(sorted(list(all_factors)))
+            return l
+        factors = set(split_composite_factors(sorted(list(set(factors)))))
+        
+        # we can still have composite factors when the server reported only a*b but neither a nor b as factor
+        # Then, we need to factorize ourselves.
+        all_factors = set()
+        for f in factors:
+            for i in factorize(f):
+                all_factors.add(i)
+        factors = all_factors
+            
+
         # for small numbers, we also check if fully factored
         # TODO: improve this, it is not considering probable prime factors (PRP-CF)
         if n <= 50000:
