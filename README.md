@@ -1,9 +1,11 @@
 # Work generator for Prime95
-This is a script which queries the PrimeNet server in order to get the status of exponents and then generates optimal P-1 / P+1 / ECM lines for the ```worktodo.txt``` of Prime95 / mprime. 
+This is a script which queries the PrimeNet server in order to get the status of exponents and then generates P-1 / P+1 lines for the ```worktodo.txt``` of Prime95 / mprime. 
+You should use this script if you want to contribute to the forum goal of increasing P-1 / P+1 bounds above the bounds below for all small-ish Mersenne numbers.
+Please read the complete thread at [https://mersenneforum.org/showthread.php?t=26750](https://mersenneforum.org/showthread.php?t=26750), too.
+
 *Please don't run this with low sleep time on large ranges, it might create high load on the PrimeNet server.*
 
-You should use this script if you want to contribute to the goal of doing proper P-1 / P+1 for small-ish Mersenne numbers.
-I have defined the following bounds as "proper" bounds:
+From the discussions at mersenneforum.org, I have defined the following bounds as the "desired" bounds:
 
 | Exponent range | P-1 B1 (known factor) | P-1 B1 (unfactored) |
 | ------ | ------ | ----- |
@@ -15,17 +17,17 @@ I have defined the following bounds as "proper" bounds:
 | 4M < n < 10M    |   2.500.000 |   2.500.000 |
 | 10M < n         |   2.000.000 |   2.000.000 |
 
-The target B1 for P+1 is to have at least one run with a value of 
+The desired target bound B1 for P+1 is to have at least one run with a value of 
 
 * half of the desired P-1 bound; or
 * half of P-1 bound which was already done for this exponent.
 
-If P-1 and P+1 are both done, this script will skip the exponent.
-It also will skip the exponent, if the B1 increase is too low (e.g. if an exponent is done with B1=9M and the target would be 10M).
+This script might skip the exponent if one of the following is true:
 
-Mersenne numbers below 50k are not considered and the script will skip all of them.
-GMP-ECM is the better tool for numbers <50k compared to Prime95.
-Please read the complete thread at [https://mersenneforum.org/showthread.php?t=26750](https://mersenneforum.org/showthread.php?t=26750), too.
+* P-1 and P+1 are already both done with bounds above the desired ones.
+* There was recent activity with this exponent, i.e results reported <90 days ago.
+* It also will skip the exponent, if B1 is below the desired target, but the increase would be very low: For instance, the target bound is B1=10M but there was already a B1=9M run. 
+* Mersenne numbers below 50k are not considered and the script will skip all of them.  GMP-ECM is the better tool for numbers <50k compared to Prime95.
 
 # Usage
 
